@@ -1,0 +1,137 @@
+swagger: "2.0"
+info:
+  title: Rinha
+  version: 0.1.0
+consumes:
+  - application/json
+produces:
+  - application/json
+schemes:
+  - http
+paths:
+  /clientes/{id}/transacoes:
+    post:
+      summary: Realizar transação
+      description: Realizar transação
+      operationId: realizarTransacao
+      parameters:
+        - in: path
+          name: id
+          required: true
+          type: integer
+          format: int64
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/TransacaoInput"
+
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/TransacaoOutput"
+        "422":
+          description: Bad Request
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+  /clientes/{id}/extrato:
+    get:
+      summary: Consultar extrato
+      description: Consultar extrato
+      operationId: consultarExtrato
+      parameters:
+        - in: path
+          name: id
+          required: true
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/Extrato"
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+
+definitions:
+  TransacaoInput:
+    type: object
+    required:
+      - valor
+      - descricao
+      - tipo
+    properties:
+      valor:
+        type: integer
+        format: int64
+      descricao:
+        type: string
+        maxLength: 10
+      tipo:
+        type: string
+        enum: [c, d]
+  TransacaoOutput:
+    type: object
+    required:
+      - limite
+      - saldo
+    properties:
+      limite:
+        type: integer
+        format: int64
+      saldo:
+        type: integer
+        format: int64
+  Extrato:
+    type: object
+    required:
+      - saldo
+      - ultimas_transacoes
+    properties:
+      saldo:
+        type: object
+        $ref: "#/definitions/SaldoExtrato"
+      ultimas_transacoes:
+        type: array
+        items:
+          $ref: "#/definitions/ListaExtrato"
+  SaldoExtrato:
+    type: object
+    required:
+      - total
+      - data_extrato
+      - limite
+    properties:
+      total:
+        type: integer
+        format: int64
+      data_extrato:
+        type: string
+        format: date-time
+      limite:
+        type: integer
+        format: int64
+  ListaExtrato:
+    type: object
+    required:
+      - valor
+      - descricao
+      - tipo
+      - realizada_em
+    properties:
+      valor:
+        type: integer
+        format: int64
+      descricao:
+        type: string
+      tipo:
+        type: string
+        enum: [c, d]
+      realizada_em:
+        type: string
+        format: date-time
