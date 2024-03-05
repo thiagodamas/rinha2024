@@ -1,1 +1,1 @@
-# rinha2024
+# rinha2024-q1-go-swagger-sqlc-postgres

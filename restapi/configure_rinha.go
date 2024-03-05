@@ -3,17 +3,26 @@
 package restapi
 
 import (
+	"context"
 	"crypto/tls"
 	"net/http"
+	"os"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
+	"github.com/go-openapi/strfmt"
+	"github.com/jackc/pgx/v5"
 
+	"rinha/models"
 	"rinha/restapi/operations"
+
+	_ "github.com/joho/godotenv/autoload"
+
+	"rinha/db"
 )
 
-//go:generate swagger generate server --target ../../rinha2024 --name Rinha --spec ../swagger.yml --principal interface{}
+//go:generate swagger generate server --target ../../rinha2024-q1-go-swagger-sqlc-postgres --name Rinha --spec ../swagger.yml --principal interface{}
 
 func configureFlags(api *operations.RinhaAPI) {
 	// api.CommandLineOptionsGroups = []swag.CommandLineOptionsGroup{ ... }
@@ -37,20 +46,105 @@ func configureAPI(api *operations.RinhaAPI) http.Handler {
 
 	api.JSONProducer = runtime.JSONProducer()
 
-	if api.ConsultarExtratoHandler == nil {
-		api.ConsultarExtratoHandler = operations.ConsultarExtratoHandlerFunc(func(params operations.ConsultarExtratoParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.ConsultarExtrato has not yet been implemented")
-		})
+	ctx := context.Background()
+	connString := "user=" + os.Getenv("DB_USER") +
+		" password=" + os.Getenv("DB_PASSWORD") +
+		" dbname=" + os.Getenv("DB_NAME") +
+		" host=" + os.Getenv("DB_HOST") +
+		" sslmode=disable"
+
+	conn, err := pgx.Connect(ctx, connString)
+	if err != nil {
+		panic(err)
 	}
-	if api.RealizarTransacaoHandler == nil {
-		api.RealizarTransacaoHandler = operations.RealizarTransacaoHandlerFunc(func(params operations.RealizarTransacaoParams) middleware.Responder {
-			return middleware.NotImplemented("operation operations.RealizarTransacao has not yet been implemented")
+	queries := db.New(conn)
+
+	api.ConsultarExtratoHandler = operations.ConsultarExtratoHandlerFunc(func(params operations.ConsultarExtratoParams) middleware.Responder {
+		extrato, err := queries.Extrato(ctx, int32(params.ID))
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return operations.NewConsultarExtratoNotFound()
+			}
+			return operations.NewConsultarExtratoInternalServerError()
+		}
+		if len(extrato) == 0 {
+			return operations.NewConsultarExtratoNotFound()
+		}
+
+		saldoextrato := models.SaldoExtrato{
+			Total:       &extrato[0].Saldo,
+			Limite:      &extrato[0].Limite,
+			DataExtrato: (*strfmt.DateTime)(&extrato[0].DataExtrato.Time),
+		}
+		var ultimastransacoes []*models.ListaExtrato
+		for _, v := range extrato {
+			if v.TipoOperacao == "e" {
+				break
+			}
+			t := v
+			ultimastransacoes = append(ultimastransacoes,
+				&models.ListaExtrato{
+					Valor:       &t.Valor.Int64,
+					Tipo:        &t.TipoOperacao,
+					Descricao:   &t.Descricao,
+					RealizadaEm: (*strfmt.DateTime)(&t.RealizadaEm.Time),
+				})
+		}
+		return operations.NewConsultarExtratoOK().WithPayload(&models.Extrato{
+			Saldo:             &saldoextrato,
+			UltimasTransacoes: ultimastransacoes,
 		})
-	}
+	})
+
+	api.RealizarTransacaoHandler = operations.RealizarTransacaoHandlerFunc(func(params operations.RealizarTransacaoParams) middleware.Responder {
+		if *params.Body.Tipo == "c" {
+			credito, err := queries.Credito(ctx, db.CreditoParams{
+				Valor:     *params.Body.Valor,
+				Descricao: *params.Body.Descricao,
+				IDConta:   int32(params.ID),
+			})
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					return &operations.RealizarTransacaoNotFound{}
+				}
+				return &operations.RealizarTransacaoInternalServerError{}
+			}
+
+			return operations.NewRealizarTransacaoOK().WithPayload(&models.TransacaoOutput{
+				Limite: &credito.Limite,
+				Saldo:  &credito.Saldo,
+			})
+		}
+		if *params.Body.Tipo == "d" {
+			debito, err := queries.Debito(ctx, db.DebitoParams{
+				Valor:     *params.Body.Valor,
+				Descricao: *params.Body.Descricao,
+				IDConta:   int32(params.ID),
+			})
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					return &operations.RealizarTransacaoNotFound{}
+				}
+				return &operations.RealizarTransacaoInternalServerError{}
+			}
+
+			if !debito.Autorizado {
+				return &operations.RealizarTransacaoUnprocessableEntity{}
+			}
+
+			return operations.NewRealizarTransacaoOK().WithPayload(&models.TransacaoOutput{
+				Limite: &debito.Limite,
+				Saldo:  &debito.Saldo,
+			})
+		}
+		return operations.NewRealizarTransacaoInternalServerError()
+	})
 
 	api.PreServerShutdown = func() {}
 
-	api.ServerShutdown = func() {}
+	api.ServerShutdown = func() {
+		conn.Close(ctx)
+	}
 
 	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
 }
