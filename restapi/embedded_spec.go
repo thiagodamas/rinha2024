@@ -186,7 +186,8 @@ func init() {
       "properties": {
         "descricao": {
           "type": "string",
-          "maxLength": 10
+          "maxLength": 10,
+          "minLength": 1
         },
         "tipo": {
           "type": "string",
@@ -389,7 +390,8 @@ func init() {
       "properties": {
         "descricao": {
           "type": "string",
-          "maxLength": 10
+          "maxLength": 10,
+          "minLength": 1
         },
         "tipo": {
           "type": "string",

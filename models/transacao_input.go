@@ -23,6 +23,7 @@ type TransacaoInput struct {
 	// descricao
 	// Required: true
 	// Max Length: 10
+	// Min Length: 1
 	Descricao *string `json:"descricao"`
 
 	// tipo
@@ -60,6 +61,10 @@ func (m *TransacaoInput) Validate(formats strfmt.Registry) error {
 func (m *TransacaoInput) validateDescricao(formats strfmt.Registry) error {
 
 	if err := validate.Required("descricao", "body", m.Descricao); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("descricao", "body", *m.Descricao, 1); err != nil {
 		return err
 	}
 
