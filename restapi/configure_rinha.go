@@ -13,6 +13,7 @@ import (
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/strfmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"rinha/models"
 	"rinha/restapi/operations"
@@ -53,7 +54,7 @@ func configureAPI(api *operations.RinhaAPI) http.Handler {
 		" host=" + os.Getenv("DB_HOST") +
 		" sslmode=disable"
 
-	conn, err := pgx.Connect(ctx, connString)
+	conn, err := pgxpool.New(context.Background(), connString)
 	if err != nil {
 		panic(err)
 	}
@@ -105,9 +106,9 @@ func configureAPI(api *operations.RinhaAPI) http.Handler {
 			})
 			if err != nil {
 				if err == pgx.ErrNoRows {
-					return &operations.RealizarTransacaoNotFound{}
+					return operations.NewRealizarTransacaoNotFound()
 				}
-				return &operations.RealizarTransacaoInternalServerError{}
+				return operations.NewRealizarTransacaoInternalServerError()
 			}
 
 			return operations.NewRealizarTransacaoOK().WithPayload(&models.TransacaoOutput{
@@ -123,13 +124,13 @@ func configureAPI(api *operations.RinhaAPI) http.Handler {
 			})
 			if err != nil {
 				if err == pgx.ErrNoRows {
-					return &operations.RealizarTransacaoNotFound{}
+					return operations.NewRealizarTransacaoNotFound()
 				}
-				return &operations.RealizarTransacaoInternalServerError{}
+				return operations.NewRealizarTransacaoInternalServerError()
 			}
 
 			if !debito.Autorizado {
-				return &operations.RealizarTransacaoUnprocessableEntity{}
+				return operations.NewRealizarTransacaoUnprocessableEntity()
 			}
 
 			return operations.NewRealizarTransacaoOK().WithPayload(&models.TransacaoOutput{
@@ -143,7 +144,7 @@ func configureAPI(api *operations.RinhaAPI) http.Handler {
 	api.PreServerShutdown = func() {}
 
 	api.ServerShutdown = func() {
-		conn.Close(ctx)
+		conn.Close()
 	}
 
 	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
