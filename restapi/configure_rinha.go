@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
@@ -54,7 +55,19 @@ func configureAPI(api *operations.RinhaAPI) http.Handler {
 		" host=" + os.Getenv("DB_HOST") +
 		" sslmode=disable"
 
-	conn, err := pgxpool.New(context.Background(), connString)
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		panic(err)
+	}
+	if os.Getenv("DB_MAX_CONNECTIONS") != "" {
+		i, err := strconv.Atoi(os.Getenv("DB_MAX_CONNECTIONS"))
+		if err != nil {
+			panic(err)
+		}
+		config.MaxConns = int32(i)
+	}
+
+	conn, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		panic(err)
 	}
