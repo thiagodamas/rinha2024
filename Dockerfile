@@ -11,7 +11,7 @@ RUN go mod download
 
 COPY . ./
 
-RUN go build -o /app/server ./cmd/rinha-server/main.go
+RUN go build -o /app/server -pgo ./default.pgo ./cmd/rinha-server/main.go
 
 ##
 ## Deploy
